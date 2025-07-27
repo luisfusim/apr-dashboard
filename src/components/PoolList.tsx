@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { supabase, type AerodromePool } from '@/lib/supabase'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { RefreshCw, Search, BadgePercent, Vault, ArrowLeftRight, ArrowUp, ArrowDown, Minus } from 'lucide-react'
@@ -229,9 +230,12 @@ export function PoolList() {
       }
     })
     
-    // Add 10% padding to the top and set minimum to 0 or slightly below the minimum value
-    const yAxisMin = Math.max(0, Math.floor(minApr * 0.9))
-    const yAxisMax = Math.ceil(maxApr * 1.1)
+    // Calculate range and use dynamic padding based on data spread
+    const range = maxApr - minApr
+    const padding = Math.max(range * 0.05, 0.1) // 5% padding or minimum 0.1%
+    
+    const yAxisMin = Math.max(0, Math.floor((minApr - padding) * 10) / 10)
+    const yAxisMax = Math.ceil((maxApr + padding) * 10) / 10
     
     return [yAxisMin, yAxisMax]
   }, [poolHistory])
@@ -250,9 +254,12 @@ export function PoolList() {
       }
     })
     
-    // Add 10% padding to the top and set minimum to 0 or slightly below the minimum value
-    const yAxisMin = Math.max(0, Math.floor(minTvl * 0.9))
-    const yAxisMax = Math.ceil(maxTvl * 1.1)
+    // Calculate range and use dynamic padding based on data spread
+    const range = maxTvl - minTvl
+    const padding = Math.max(range * 0.03, 1000) // 3% padding or minimum $1000
+    
+    const yAxisMin = Math.max(0, Math.floor(minTvl - padding))
+    const yAxisMax = Math.ceil(maxTvl + padding)
     
     return [yAxisMin, yAxisMax]
   }, [poolHistory])
@@ -268,27 +275,26 @@ export function PoolList() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Aerodrome Pools</h2>
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">{selectedPool}</h2>
         
-        {/* Time Range Select */}
-        {selectedPool && (
-          <div className="flex flex-wrap gap-2 mr-auto ml-0 sm:ml-4">
-            {timeRangeOptions.map((option) => (
-              <Button
-                key={option.value}
-                variant={timeRange === option.value ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setTimeRange(option.value)}
-                className="text-xs"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
-        )}
-        
-        {/* Search Input */}
+        {/* Time Range Select and Search Input */}
         <div className="flex items-center gap-2">
+          {/* Time Range Select */}
+          {selectedPool && (
+            <Select value={timeRange} onValueChange={(value: TimeRange) => setTimeRange(value)}>
+              <SelectTrigger className="w-[140px] h-10">
+                <SelectValue placeholder="Select range" />
+              </SelectTrigger>
+              <SelectContent>
+                {timeRangeOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          
           <div className="relative w-full sm:w-80">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-500 dark:text-slate-400" />
@@ -339,6 +345,7 @@ export function PoolList() {
               </div>
             )}
           </div>
+           
           <Button onClick={fetchPools} variant="outline" size="icon" className="h-10 w-10">
             <RefreshCw className="h-4 w-4" />
           </Button>
@@ -349,10 +356,6 @@ export function PoolList() {
       {selectedPool ? (
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <h3 className="text-lg font-semibold">
-              Pool Analytics - {selectedPool}
-            </h3>
-            
             {/* Custom Date Inputs */}
             {timeRange === 'custom' && (
               <div className="flex flex-col sm:flex-row gap-3 p-4 bg-slate-50 dark:bg-gray-800 rounded-lg border border-slate-200 dark:border-gray-700 mt-4">
@@ -629,29 +632,97 @@ export function PoolList() {
                           stroke="#9333ea"
                         />
                         <Tooltip 
-                          formatter={(value: number, name: string) => {
-                            if (name === 'apr') {
-                              return [`${value.toFixed(2)}%`, 'APR'];
-                            }
-                            if (name === 'total_tvl') {
-                              return [formatCurrency(value), 'TVL'];
-                            }
-                            return [value, name];
-                          }}
-                          labelFormatter={(label, payload) => {
-                            if (payload && payload.length > 0 && payload[0].payload) {
-                              return `Date: ${payload[0].payload.formattedDate}`
-                            }
-                            return `Date: ${label}`
+                          content={({ active, payload, label }) => {
+                            if (!active || !payload || payload.length === 0) return null;
+                            
+                            // Find current data point index
+                            const currentIndex = chartData.findIndex(item => 
+                              item.formattedDate === label
+                            );
+                            const previousData = currentIndex > 0 ? chartData[currentIndex - 1] : null;
+                            
+                            // Get the full date from the current data point
+                            const currentData = chartData[currentIndex];
+                            const fullDate = currentData?.rawDate instanceof Date 
+                              ? `${currentData.rawDate.toLocaleDateString('en-US', {
+                                  weekday: 'long',
+                                  year: 'numeric',
+                                  month: 'long',
+                                  day: 'numeric'
+                                })} at ${currentData.rawDate.toLocaleTimeString('en-US', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: true
+                                })}`
+                              : label;
+                            
+                            return (
+                              <div className="bg-slate-800 border border-slate-600 rounded-lg p-3 shadow-lg">
+                                <div className="text-slate-200 font-bold text-sm mb-2">
+                                  {fullDate}
+                                </div>
+                                {payload.map((entry, index) => {
+                                  const value = entry.value as number;
+                                  const name = entry.name;
+                                  let changeText = '';
+                                  let changeColor = '#94a3b8';
+                                  
+                                  if (previousData) {
+                                    if (name === 'APR' && previousData.apr !== null && previousData.apr !== undefined) {
+                                      const change = value - previousData.apr;
+                                      const changePercent = ((change / previousData.apr) * 100).toFixed(2);
+                                      const changeSymbol = change >= 0 ? '+' : '';
+                                      changeText = ` (${changeSymbol}${changePercent}%)`;
+                                      changeColor = change >= 0 ? '#10b981' : '#ef4444';
+                                    } else if (name === 'TVL' && previousData.total_tvl !== null && previousData.total_tvl !== undefined) {
+                                      const change = value - previousData.total_tvl;
+                                      const changePercent = ((change / previousData.total_tvl) * 100).toFixed(2);
+                                      const changeSymbol = change >= 0 ? '+' : '';
+                                      changeText = ` (${changeSymbol}${changePercent}%)`;
+                                      changeColor = change >= 0 ? '#10b981' : '#ef4444';
+                                    }
+                                  }
+                                  
+                                  return (
+                                    <div key={index} className="flex items-center text-sm mb-1">
+                                      <div 
+                                        className="w-3 h-3 rounded-full mr-2" 
+                                        style={{ backgroundColor: entry.color }}
+                                      />
+                                      <span className="text-slate-200 font-medium">{name}: </span>
+                                      <span className="text-slate-100">
+                                        {name === 'APR' 
+                                          ? `${value.toFixed(2)}%` 
+                                          : new Intl.NumberFormat('en-US', {
+                                              style: 'currency',
+                                              currency: 'USD',
+                                              minimumFractionDigits: 0,
+                                              maximumFractionDigits: 0,
+                                            }).format(value)
+                                        }
+                                        {changeText && (
+                                          <span style={{ color: changeColor, marginLeft: '4px' }}>
+                                            {changeText}
+                                          </span>
+                                        )}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
                           }}
                           contentStyle={{
-                            backgroundColor: 'rgba(30, 41, 59, 0.9)',
+                            backgroundColor: 'rgba(30, 41, 59, 0.95)',
                             border: '1px solid rgba(100, 116, 139, 0.5)',
-                            borderRadius: '6px',
-                            color: '#e2e8f0'
+                            borderRadius: '8px',
+                            color: '#e2e8f0',
+                            padding: '12px',
+                            fontSize: '14px',
+                            minWidth: '200px'
                           }}
-                          itemStyle={{ color: '#e2e8f0' }}
-                          labelStyle={{ color: '#e2e8f0', fontWeight: 'bold' }}
+                          itemStyle={{ color: '#e2e8f0', fontSize: '14px', fontWeight: '500' }}
+                          labelStyle={{ color: '#e2e8f0', fontWeight: 'bold', fontSize: '14px', marginBottom: '8px' }}
                         />
                         <Line
                           yAxisId="left"
