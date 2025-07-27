@@ -175,11 +175,6 @@ export function PoolList() {
     return `${apr.toFixed(2)}%`
   }
   
-  // Format APR as whole number for chart labels
-  const formatAPRWhole = (apr: number | null) => {
-    if (!apr) return '0%'
-    return `${Math.round(apr)}%`
-  }
 
   const getTimeRangeText = () => {
     if (timeRange === 'custom') {
@@ -593,10 +588,10 @@ export function PoolList() {
               </CardContent>
             </Card>
             
-            {/* APR Chart */}
+            {/* Combined APR & TVL Chart */}
             <Card className="bg-white dark:bg-gray-900 backdrop-blur-sm border-blue-200/50 dark:border-gray-800 lg:col-span-3">
               <CardHeader>
-                <CardTitle className="text-slate-800 dark:text-slate-200">APR History - {getTimeRangeText()}</CardTitle>
+                <CardTitle className="text-slate-800 dark:text-slate-200">APR & TVL History - {getTimeRangeText()}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="h-64">
@@ -606,7 +601,7 @@ export function PoolList() {
                     </div>
                   ) : chartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 20, left: 0 }}>
+                      <LineChart data={chartData} margin={{ top: 5, right: 30, bottom: 20, left: 30 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#475569" opacity={0.2} />
                         <XAxis 
                           dataKey="formattedDate" 
@@ -614,17 +609,36 @@ export function PoolList() {
                           stroke="#94a3b8"
                         />
                         <YAxis 
+                          yAxisId="left"
+                          orientation="left"
                           tick={{ fontSize: 12 }}
-                          label={{ value: 'APR (%)', angle: -90, position: 'insideLeft' }}
+                          label={{ value: 'APR (%)', angle: -90, position: 'insideLeft', offset: -15 }}
                           domain={aprDomain}
                           allowDataOverflow={false}
                           tickFormatter={(value) => `${value}%`}
-                          stroke="#94a3b8"
+                          stroke="#3b82f6"
+                        />
+                        <YAxis 
+                          yAxisId="right"
+                          orientation="right"
+                          tick={{ fontSize: 12 }}
+                          label={{ value: 'TVL ($)', angle: 90, position: 'insideRight', offset: -15 }}
+                          domain={tvlDomain}
+                          allowDataOverflow={false}
+                          tickFormatter={(value) => formatCurrencyCompact(value)}
+                          stroke="#9333ea"
                         />
                         <Tooltip 
-                          formatter={(value: number) => [`${value.toFixed(2)}%`, 'APR']}
+                          formatter={(value: number, name: string) => {
+                            if (name === 'apr') {
+                              return [`${value.toFixed(2)}%`, 'APR'];
+                            }
+                            if (name === 'total_tvl') {
+                              return [formatCurrency(value), 'TVL'];
+                            }
+                            return [value, name];
+                          }}
                           labelFormatter={(label, payload) => {
-                            // Use the formattedDate from the payload data
                             if (payload && payload.length > 0 && payload[0].payload) {
                               return `Date: ${payload[0].payload.formattedDate}`
                             }
@@ -640,77 +654,24 @@ export function PoolList() {
                           labelStyle={{ color: '#e2e8f0', fontWeight: 'bold' }}
                         />
                         <Line
+                          yAxisId="left"
                           type="monotone"
                           dataKey="apr"
                           stroke="#3b82f6"
                           strokeWidth={2}
                           dot={{ fill: '#3b82f6', strokeWidth: 2, r: 3 }}
                           activeDot={{ r: 5 }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="flex items-center justify-center h-full">
-                      <div className="text-lg text-slate-700 dark:text-slate-300">No data available</div>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-            
-            {/* TVL Chart */}
-            <Card className="bg-white dark:bg-gray-900 backdrop-blur-sm border-blue-200/50 dark:border-gray-800 lg:col-span-3">
-              <CardHeader>
-                <CardTitle className="text-slate-800 dark:text-slate-200">TVL History - {getTimeRangeText()}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64">
-                  {historyLoading ? (
-                    <div className="flex items-center justify-center h-full">
-                      <div className="text-lg text-slate-700 dark:text-slate-300">Loading chart...</div>
-                    </div>
-                  ) : chartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 20, left: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#475569" opacity={0.2} />
-                        <XAxis 
-                          dataKey="formattedDate" 
-                          tick={{ fontSize: 12 }}
-                          stroke="#94a3b8"
-                        />
-                        <YAxis 
-                          tick={{ fontSize: 12 }}
-                          label={{ value: 'TVL ($)', angle: -90, position: 'insideLeft' }}
-                          domain={tvlDomain}
-                          allowDataOverflow={false}
-                          tickFormatter={(value) => formatCurrencyCompact(value)}
-                          stroke="#94a3b8"
-                        />
-                        <Tooltip 
-                          formatter={(value: number) => [formatCurrency(value), 'TVL']}
-                          labelFormatter={(label, payload) => {
-                            // Use the formattedDate from the payload data
-                            if (payload && payload.length > 0 && payload[0].payload) {
-                              return `Date: ${payload[0].payload.formattedDate}`
-                            }
-                            return `Date: ${label}`
-                          }}
-                          contentStyle={{
-                            backgroundColor: 'rgba(30, 41, 59, 0.9)',
-                            border: '1px solid rgba(100, 116, 139, 0.5)',
-                            borderRadius: '6px',
-                            color: '#e2e8f0'
-                          }}
-                          itemStyle={{ color: '#e2e8f0' }}
-                          labelStyle={{ color: '#e2e8f0', fontWeight: 'bold' }}
+                          name="APR"
                         />
                         <Line
+                          yAxisId="right"
                           type="monotone"
                           dataKey="total_tvl"
                           stroke="#9333ea"
                           strokeWidth={2}
                           dot={{ fill: '#9333ea', strokeWidth: 2, r: 3 }}
                           activeDot={{ r: 5 }}
+                          name="TVL"
                         />
                       </LineChart>
                     </ResponsiveContainer>
