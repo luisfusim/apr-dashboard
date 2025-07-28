@@ -209,7 +209,7 @@ export function PoolList() {
         date: date.toLocaleDateString(), // Keep this for backward compatibility
         formattedDate: allSameDay
           ? date.toLocaleTimeString([], { hour: '2-digit', hour12: false })
-          : `${date.getMonth() + 1}/${date.getDate()} ${date.toLocaleTimeString([], { hour: '2-digit', hour12: false })}`,
+          : `${date.getDate()} ${date.toLocaleTimeString([], { hour: '2-digit', hour12: false })}`,
         apr: item.apr,
         total_tvl: item.total_tvl
       }

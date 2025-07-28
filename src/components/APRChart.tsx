@@ -19,7 +19,7 @@ export function APRChart({ data, selectedProtocols }: APRChartProps) {
 
   // Group data by date and protocol for the chart
   const chartData = filteredData.reduce((acc: ChartDataPoint[], item) => {
-    const date = new Date(item.date).toLocaleDateString()
+    const date = new Date(item.date).getDate().toString()
     const existingEntry = acc.find((entry: ChartDataPoint) => entry.date === date)
     
     if (existingEntry) {
