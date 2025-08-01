@@ -13,10 +13,10 @@ export function Dashboard() {
                 <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
                   <span className="text-white font-bold text-sm">A</span>
                 </div>
-                <h1 className="text-2xl font-bold text-slate-900 dark:text-white">AERODROME</h1>
+                <h1 className="text-2xl font-bold text-slate-900 dark:text-white">DROME STATS</h1>
               </div>
               <div className="hidden sm:block h-6 w-px bg-slate-300 dark:bg-slate-600 mx-2" />
-              <span className="text-sm text-slate-600 dark:text-slate-400 hidden sm:inline">APR Dashboard</span>
+              <span className="text-sm text-slate-600 dark:text-slate-400 hidden sm:inline">Dashboard</span>
             </div>
             <ThemeToggle />
           </div>
@@ -30,7 +30,7 @@ export function Dashboard() {
             Pool Analytics & Performance
           </h2>
           <p className="text-slate-600 dark:text-slate-400">
-            Real-time APR data visualization and historical analysis for Aerodrome pools
+            APR data visualization and historical analysis for Aerodrome pools
           </p>
         </div>
 

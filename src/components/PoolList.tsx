@@ -36,7 +36,7 @@ export function PoolList() {
   const [poolHistory, setPoolHistory] = useState<PoolAPRHistory[]>([])
   const [loading, setLoading] = useState(true)
   const [historyLoading, setHistoryLoading] = useState(false)
-  const [timeRange, setTimeRange] = useState<TimeRange>('7d')
+  const [timeRange, setTimeRange] = useState<TimeRange>('24h')
   const [customStartDate, setCustomStartDate] = useState('')
   const [customEndDate, setCustomEndDate] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
@@ -175,6 +175,35 @@ export function PoolList() {
     if (!apr) return '0.00%'
     return `${apr.toFixed(2)}%`
   }
+
+  // Helper function to calculate percentage difference
+  const calculatePercentageDiff = (current: number | null, comparison: number | null) => {
+    if (!current || !comparison || comparison === 0) return null
+    const diff = ((current - comparison) / comparison) * 100
+    return diff
+  }
+
+  // Helper function to format percentage difference
+  const formatPercentageDiff = (diff: number | null) => {
+    if (diff === null) return ''
+    const sign = diff >= 0 ? '+' : ''
+    return `${sign}${diff.toFixed(1)}%`
+  }
+
+  // Helper function to format absolute difference for TVL
+  const formatAbsoluteDiff = (current: number | null, comparison: number | null) => {
+    if (!current || !comparison) return ''
+    const diff = current - comparison
+    const sign = diff >= 0 ? '+' : ''
+    
+    if (Math.abs(diff) >= 1000000) {
+      return `${sign}${(diff / 1000000).toFixed(1)}M`
+    } else if (Math.abs(diff) >= 1000) {
+      return `${sign}${(diff / 1000).toFixed(0)}K`
+    } else {
+      return `${sign}${Math.round(diff)}`
+    }
+  }
   
 
   const getTimeRangeText = () => {
@@ -202,19 +231,71 @@ export function PoolList() {
       date.getFullYear() === dates[0].getFullYear()
     )
     
-    return poolHistory.map(item => {
-      const date = new Date(item.scraped_at)
-      return {
-        rawDate: date, // Store raw date for sorting and comparison
-        date: date.toLocaleDateString(), // Keep this for backward compatibility
-        formattedDate: allSameDay
-          ? date.toLocaleTimeString([], { hour: '2-digit', hour12: false })
-          : `${date.getDate()} ${date.toLocaleTimeString([], { hour: '2-digit', hour12: false })}`,
-        apr: item.apr,
-        total_tvl: item.total_tvl
-      }
-    }).sort((a, b) => a.rawDate.getTime() - b.rawDate.getTime()) // Ensure chronological order
-  }, [poolHistory])
+    // Determine if we should group by day (for 7+ days) or show hourly data
+    const currentOption = timeRangeOptions.find(opt => opt.value === timeRange)
+    const shouldGroupByDay = currentOption?.days && currentOption.days >= 7
+    
+    if (shouldGroupByDay && !allSameDay) {
+      // Group data by day and calculate daily averages
+      const dailyGroups = new Map()
+      
+      poolHistory.forEach(item => {
+        const date = new Date(item.scraped_at)
+        const dayKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+        
+        if (!dailyGroups.has(dayKey)) {
+          dailyGroups.set(dayKey, {
+            date: new Date(date.getFullYear(), date.getMonth(), date.getDate()),
+            aprValues: [],
+            tvlValues: []
+          })
+        }
+        
+        const group = dailyGroups.get(dayKey)
+        if (item.apr !== null && item.apr !== undefined) {
+          group.aprValues.push(item.apr)
+        }
+        if (item.total_tvl !== null && item.total_tvl !== undefined) {
+          group.tvlValues.push(item.total_tvl)
+        }
+      })
+      
+      // Convert grouped data to chart format with daily averages
+      return Array.from(dailyGroups.values()).map(group => {
+        const avgApr = group.aprValues.length > 0 
+           ? group.aprValues.reduce((sum: number, val: number) => sum + val, 0) / group.aprValues.length
+           : null
+         const avgTvl = group.tvlValues.length > 0
+           ? group.tvlValues.reduce((sum: number, val: number) => sum + val, 0) / group.tvlValues.length
+           : null
+          
+        return {
+          rawDate: group.date,
+          date: group.date.toLocaleDateString(),
+          formattedDate: group.date.toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric' 
+          }),
+          apr: avgApr,
+          total_tvl: avgTvl
+        }
+      }).sort((a, b) => a.rawDate.getTime() - b.rawDate.getTime())
+    } else {
+      // Show hourly data for shorter periods or same-day data
+      return poolHistory.map(item => {
+        const date = new Date(item.scraped_at)
+        return {
+          rawDate: date, // Store raw date for sorting and comparison
+          date: date.toLocaleDateString(), // Keep this for backward compatibility
+          formattedDate: allSameDay
+            ? date.toLocaleTimeString([], { hour: '2-digit', hour12: false })
+            : `${date.getDate()} ${date.toLocaleTimeString([], { hour: '2-digit', hour12: false })}`,
+          apr: item.apr,
+          total_tvl: item.total_tvl
+        }
+      }).sort((a, b) => a.rawDate.getTime() - b.rawDate.getTime()) // Ensure chronological order
+    }
+  }, [poolHistory, timeRange])
 
   // Calculate min and max APR values for Y-axis domain
   const aprDomain = useMemo(() => {
@@ -483,6 +564,14 @@ export function PoolList() {
                             </p>
                           </div>
                         </div>
+                        <div className="text-right">
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            vs current: {formatPercentageDiff(calculatePercentageDiff(
+                              poolHistory[poolHistory.length - 1]?.apr,
+                              Math.max(...chartData.filter(d => d.apr !== null).map(d => d.apr || 0))
+                            ))}
+                          </p>
+                        </div>
                       </div>
                       {/* Average APR */}
                       <div className="flex items-center justify-between p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
@@ -499,6 +588,14 @@ export function PoolList() {
                             </p>
                           </div>
                         </div>
+                        <div className="text-right">
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            vs current: {formatPercentageDiff(calculatePercentageDiff(
+                              poolHistory[poolHistory.length - 1]?.apr,
+                              chartData.filter(d => d.apr !== null).reduce((acc, d) => acc + (d.apr || 0), 0) / chartData.filter(d => d.apr !== null).length
+                            ))}
+                          </p>
+                        </div>
                       </div>
                       {/* Lowest APR */}
                       <div className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
@@ -512,6 +609,14 @@ export function PoolList() {
                               {formatAPR(Math.min(...chartData.filter(d => d.apr !== null).map(d => d.apr || 0)))}
                             </p>
                           </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            vs current: {formatPercentageDiff(calculatePercentageDiff(
+                              poolHistory[poolHistory.length - 1]?.apr,
+                              Math.min(...chartData.filter(d => d.apr !== null).map(d => d.apr || 0))
+                            ))}
+                          </p>
                         </div>
                       </div>
                     </>
@@ -550,6 +655,20 @@ export function PoolList() {
                             </p>
                           </div>
                         </div>
+                        <div className="text-right">
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            vs current: {formatPercentageDiff(calculatePercentageDiff(
+                              poolHistory[poolHistory.length - 1]?.total_tvl,
+                              Math.max(...chartData.filter(d => d.total_tvl !== null).map(d => d.total_tvl || 0))
+                            ))}
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            {formatAbsoluteDiff(
+                              poolHistory[poolHistory.length - 1]?.total_tvl,
+                              Math.max(...chartData.filter(d => d.total_tvl !== null).map(d => d.total_tvl || 0))
+                            )}
+                          </p>
+                        </div>
                       </div>
                       {/* Average TVL */}
                       <div className="flex items-center justify-between p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
@@ -566,6 +685,20 @@ export function PoolList() {
                             </p>
                           </div>
                         </div>
+                        <div className="text-right">
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            vs current: {formatPercentageDiff(calculatePercentageDiff(
+                              poolHistory[poolHistory.length - 1]?.total_tvl,
+                              chartData.filter(d => d.total_tvl !== null).reduce((acc, d) => acc + (d.total_tvl || 0), 0) / chartData.filter(d => d.total_tvl !== null).length
+                            ))}
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            {formatAbsoluteDiff(
+                              poolHistory[poolHistory.length - 1]?.total_tvl,
+                              chartData.filter(d => d.total_tvl !== null).reduce((acc, d) => acc + (d.total_tvl || 0), 0) / chartData.filter(d => d.total_tvl !== null).length
+                            )}
+                          </p>
+                        </div>
                       </div>
                       {/* Lowest TVL */}
                       <div className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
@@ -579,6 +712,20 @@ export function PoolList() {
                               {formatCurrency(Math.min(...chartData.filter(d => d.total_tvl !== null).map(d => d.total_tvl || 0)))}
                             </p>
                           </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            vs current: {formatPercentageDiff(calculatePercentageDiff(
+                              poolHistory[poolHistory.length - 1]?.total_tvl,
+                              Math.min(...chartData.filter(d => d.total_tvl !== null).map(d => d.total_tvl || 0))
+                            ))}
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            {formatAbsoluteDiff(
+                              poolHistory[poolHistory.length - 1]?.total_tvl,
+                              Math.min(...chartData.filter(d => d.total_tvl !== null).map(d => d.total_tvl || 0))
+                            )}
+                          </p>
                         </div>
                       </div>
                     </>
